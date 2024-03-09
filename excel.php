@@ -105,3 +105,4 @@ if (strpos($valorCelda, "Vigente desde:") === 0) {
 }
 
 echo "Proceso completado.";
+//tarea finalizada
