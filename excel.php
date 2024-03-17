@@ -1,108 +1,114 @@
 <?php
 
-// librería PhpSpreadsheet
+// Incluir la librería PhpSpreadsheet
 require 'vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+ini_set('memory_limit', '512M'); // Ajusta el límite de memoria según tus necesidades
 
 // Carpeta de los archivos Excel
 $directorio = 'C:/Users/USERS/Desktop/excelphp/';
 
 // Listado xlsx que contiene la información
-$rutaListado = 'C:/Users/USERS/Desktop/listado.xlsx';
+$rutaListado = 'C:/Users/USERS/Desktop/cambio.xlsx';
 
-// variable códigos de reemplazo
+// Cargar el archivo listado.xlsx
 $listado = IOFactory::load($rutaListado);
 $hojaListado = $listado->getActiveSheet();
 
-// array para almacenar los códigos anteriores y nuevos
+// Array para almacenar los códigos anteriores y nuevos
 $cambios = [];
 
-//  códigos a buscar y reemplazar
+//  Códigos a buscar y reemplazar
 foreach ($hojaListado->getRowIterator() as $fila) {
-    // número de fila
+    // Número de fila
     $numeroFila = $fila->getRowIndex();
    
-    // celdas a buscar A y B del listado
+    // Celdas a buscar en las columnas A y B del listado
     $codigoAnterior = $hojaListado->getCell('B'.$numeroFila)->getValue();
-    $codigoNuevo = $hojaListado->getCell('D'.$numeroFila)->getValue();
-   
-    // array códigos anteriores-nuevos
+    $codigoNuevo = $hojaListado->getCell('A'.$numeroFila)->getValue();
+   //getCalculatedValue usa si la celda tiene  fórmula
+    // Almacenar los códigos anteriores y nuevos en el array $cambios
     $cambios[$codigoAnterior] = $codigoNuevo;
 }
 
-
-// lista de archivos en el directorio
+// Lista de archivos en el directorio
 $archivos = scandir($directorio);
+echo "Iniciando procesamiento...\n";
 
-//  Recorremos cada archivo en el directorio
+// Recorrer cada archivo en el directorio
 foreach ($archivos as $archivo) {
-    // archivo Excel .xlsx
+    // Si el archivo es un Excel (.xlsx)
     if (pathinfo($archivo, PATHINFO_EXTENSION) == 'xlsx') {
-        // Cargamos el archivo Excel
+        echo "Procesando archivo: $archivo\n";
+        // Cargar el archivo Excel
         $objPHPExcel = IOFactory::load($directorio . $archivo);
         $hojaActual = $objPHPExcel->getActiveSheet();
+		
+		$reemplazoRealizado = false; // Variable para rastrear si se realizó al menos un reemplazo en este archivo
 
-        // revisar cada celda
-        foreach ($hojaActual->getRowIterator() as $row) {
-            foreach ($row->getCellIterator() as $celda) {
-                // valor de cada celda
+        // Recorrer solo el rango de celdas deseado (por ejemplo, A1:A1000)
+        foreach ($hojaActual->getRowIterator(2, 100) as $row) {
+            foreach ($row->getCellIterator('A', 'B') as $celda) {
+                // Valor de cada celda
                 $valorCelda = $celda->getValue();
 
-                // Verificamos si $valorCelda no es null antes de llamar a trim()
+                // Verificar si $valorCelda no es null antes de llamar a trim()
                 if ($valorCelda !== null) {
                     $valorCelda = trim($valorCelda);
                 } else {
-                    // Asignamos un valor por defecto o tomamos alguna acción según sea necesario
+                    // Asignar un valor por defecto o tomar alguna acción según sea necesario
                     $valorCelda = ''; // O cualquier otro valor predeterminado que desees
                 }
 
                 // Este código es para buscar y reemplazar el código principal sin la versión adicional
                 foreach ($cambios as $codigoAnterior => $codigoNuevo) {
-                    // Verificamos si el código anterior está presente en el valor de la celda
+                    // Verificar si el código anterior está presente en el valor de la celda
                     if (strpos($valorCelda, $codigoAnterior) !== false) {
-                        // Obtenemos la dirección de la celda
+                        // Obtener la dirección de la celda
                         $direccionCelda = $celda->getCoordinate();
 
-                        // Verificamos si $codigoNuevo no es null antes de usarlo
+                        // Verificar si $codigoNuevo no es null antes de usarlo
                         if ($codigoNuevo !== null) {
-                            // Reemplazamos solo el código anterior manteniendo la versión existente
+                            // Reemplazar solo el código anterior manteniendo la versión existente
                             $valorNuevo = str_replace($codigoAnterior, $codigoNuevo, $valorCelda);
 
-                            // Actualizamos el valor de la celda con el código actualizado
+                            // Actualizar el valor de la celda con el código actualizado
                             $hojaActual->setCellValue($direccionCelda, $valorNuevo);
                         }
 
-                        // Salimos del bucle una vez que encontramos una coincidencia para evitar múltiples reemplazos en una celda
+                        // Salir del bucle una vez que se encuentra una coincidencia para evitar múltiples reemplazos en una celda
+						$reemplazoRealizado = true;
                         break;
                     }
                 }
+                //echo "Valor de la celda: $valorCelda\n";
+                // Verificar si la cadena comienza con "Vigente desde:"
+                if (strpos($valorCelda, "Vigente desde:") === 0) {
+                    // Extraer la fecha del formato YYYY-MM-DD
+                    preg_match('/Vigente desde:\s*(\d{4}-\d{2}-\d{2})/', $valorCelda, $matches);
+                    $fechaActual = isset($matches[1]) ? $matches[1] : null;
 
-               // Verificamos si la cadena comienza con "Vigente desde:"
-if (strpos($valorCelda, "Vigente desde:") === 0) {
-    // Extraemos la fecha del formato YYYY-MM-DD
-    preg_match('/Vigente desde:\s*(\d{4}-\d{2}-\d{2})/', $valorCelda, $matches);
-    $fechaActual = isset($matches[1]) ? $matches[1] : null;
+                    // Reemplazar la fecha actual con "2024-03-01"
+                    if ($fechaActual !== null) {
+                        $valorCelda = str_replace($fechaActual, '2024-03-01', $valorCelda);
+                    }
+                    echo "Celda actualizada: $valorCelda\n";
+                    // Obtener la dirección de la celda
+                    $direccionCelda = $celda->getCoordinate();
 
-    // Reemplazamos la fecha actual con "2024-03-01"
-    if ($fechaActual !== null) {
-        $valorCelda = str_replace($fechaActual, '2024-03-01', $valorCelda);
-    }
-
-    // Obtenemos la dirección de la celda
-    $direccionCelda = $celda->getCoordinate();
-
-    // Actualizamos el valor de la celda con la cadena modificada
-    $hojaActual->setCellValue($direccionCelda, $valorCelda);
+                    // Actualizar el valor de la celda con la cadena modificada
+                    $hojaActual->setCellValue($direccionCelda, $valorCelda);
                 }
             }
         }
 
         // Guardar los cambios en el archivo Excel
-        $writer = IOFactory::createWriter($objPHPExcel, 'Xlsx');
+        if ($reemplazoRealizado) {
+		$writer = IOFactory::createWriter($objPHPExcel, 'Xlsx');
         $writer->save($directorio . $archivo);
+		}
     }
 }
 
 echo "Proceso completado.";
-//tarea finalizada
